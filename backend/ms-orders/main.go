@@ -16,7 +16,8 @@ func main() {
     r := gin.Default()
     r.POST("/pedidos", handlers.CrearPedido)
     r.GET("/pedidos", handlers.ListarPedidos)
-
+    r.GET("/pedidos/customers/:id", handlers.ListarPedidosPorCustomer)
+    
     port := os.Getenv("PORT")
     if port == "" {
         port = "8002"

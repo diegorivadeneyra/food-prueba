@@ -1,0 +1,111 @@
+services:
+  db-orders:
+    image: mysql:8.0
+    container_name: db-orders
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: ordersdb
+    ports:
+      - "3308:3306" 
+    volumes:
+      - db-orders-data:/var/lib/mysql
+      - ../backend/ms-orders/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ms-orders-api:
+    build: ../backend/ms-orders
+    container_name: ms-orders-api
+    ports:
+      - "8002:8002"
+    depends_on:
+      - db-orders
+    environment:
+      DB_USER: root
+      DB_PASSWORD: password
+      DB_HOST: db-orders
+      DB_PORT: 3306
+      DB_NAME: ordersdb
+      CLIENTES_URL: http://ms-customers:8001
+      MENU_URL: http://ms-menu:8003
+
+  db-customers:
+    image: postgres:15
+    container_name: db-customers
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: customersdb
+    ports:
+      - "5440:5432"
+    volumes:
+      - customers_data:/var/lib/postgresql/data
+
+  ms-customers:
+    build: ../backend/ms-customers
+    container_name: ms-customers
+    depends_on:
+      - db-customers
+    environment:
+      DATABASE_URL: postgresql://admin:admin@db-customers:5432/customersdb
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../backend/ms-customers/app:/app/app
+
+  db-menu:
+    image: mongo:7
+    container_name: db-menu
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: foodflow_menu
+    volumes:
+      - mongodb_data:/data/db
+
+  ms-menu:  
+    build: ../backend/ms-menu
+    container_name: ms-menu
+    ports:
+      - "8003:8003"
+    environment:
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://admin:password@db-menu:27017/foodflow_menu?authSource=admin
+    depends_on:
+      - db-menu
+    volumes:
+    - ../backend/ms-menu:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/api/v1/menu"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  ms-history:
+    build: ../backend/ms-history
+    container_name: ms-history
+    depends_on:
+      - ms-customers
+      - ms-orders-api
+      - ms-menu
+    environment:
+      CUSTOMERS_URL: http://ms-customers:8001/customers
+      ORDERS_URL: http://ms-orders-api:8002/pedidos
+      MENU_URL: http://ms-menu:8003/api/v1/menu
+    ports:
+      - "8004:8004"
+    volumes:
+      - ../backend/ms-history/app:/app/app
+
+volumes:  
+  customers_data:
+  db-orders-data:
+  mongodb_data:

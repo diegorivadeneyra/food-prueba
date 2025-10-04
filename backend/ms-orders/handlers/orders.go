@@ -155,3 +155,74 @@ func ListarPedidos(c *gin.Context) {
     
     c.JSON(http.StatusOK, pedidos)
 }
+
+func ListarPedidosPorCustomer(c *gin.Context) {
+    customerID := c.Param("id")
+
+    resp, err := http.Get("http://ms-menu:8003/api/v1/menu")
+    if err != nil {
+        fmt.Println("❌ Error consultando ms-menu:", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "No se pudo obtener el menú"})
+        return
+    }
+    defer resp.Body.Close()
+
+    var menuResp struct {
+        Success bool `json:"success"`
+        Data    []struct {
+            ID     string `json:"_id"`
+            Nombre string `json:"nombre"`
+        } `json:"data"`
+    }
+
+    if err := json.NewDecoder(resp.Body).Decode(&menuResp); err != nil {
+        fmt.Println("❌ Error decodificando menú:", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Menú mal formateado"})
+        return
+    }
+
+    menuLookup := make(map[string]string)
+    for _, plato := range menuResp.Data {
+        menuLookup[plato.ID] = plato.Nombre
+    } 
+
+    rows, err := database.DB.Query("SELECT id, cliente_id, fecha, estado, notas FROM pedidos WHERE cliente_id = ?", customerID)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al consultar pedidos"})
+        return
+    }
+    defer rows.Close()
+
+    var pedidos []models.Pedido
+
+    for rows.Next() {
+        var p models.Pedido
+        rows.Scan(&p.ID, &p.ClienteID, &p.Fecha, &p.Estado, &p.Notas)
+
+        itemRows, err := database.DB.Query("SELECT id, pedido_id, plato_id, cantidad, precio FROM items_pedido WHERE pedido_id = ?", p.ID)
+        if err != nil {
+            continue
+        }
+
+        var items []models.ItemPedido
+        var total float64
+
+        for itemRows.Next() {
+            var item models.ItemPedido
+            itemRows.Scan(&item.ID, &item.PedidoID, &item.PlatoID, &item.Cantidad, &item.Precio)
+
+            if nombre, ok := menuLookup[item.PlatoID]; ok {
+                item.Nombre = nombre
+            }
+            total += item.Precio * float64(item.Cantidad)
+            items = append(items, item)
+        }
+        itemRows.Close()
+
+        p.Items = items
+        p.Total = total
+        pedidos = append(pedidos, p)
+    }
+
+    c.JSON(http.StatusOK, pedidos)
+}

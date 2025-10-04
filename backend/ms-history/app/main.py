@@ -5,7 +5,7 @@ app = FastAPI(title="MS History")
 
 CUSTOMERS_URL = os.getenv("CUSTOMERS_URL", "http://ms-customers:8001/customers")
 RESERVATIONS_URL = os.getenv("RESERVATIONS_URL", "http://ms-customers:8001/reservations")
-ORDERS_URL = os.getenv("ORDERS_URL", None)
+ORDERS_URL = os.getenv("ORDERS_URL", "http://ms-orders:8002/pedidos")
 MENU_URL = os.getenv("MENU_URL", None)
 
 
@@ -30,19 +30,27 @@ async def get_customer_history(customer_id: int):
             orders_data = []
             if ORDERS_URL:
                 try:
-                    orders_resp = await client.get(f"{ORDERS_URL}?customer_id={customer_id}")
-                    print("ORDERS URL:", f"{ORDERS_URL}?customer_id={customer_id}")
+                    orders_resp = await client.get(f"{ORDERS_URL}/customers/{customer_id}")
                     print("ORDERS status:", orders_resp.status_code)
-                    try:
-                        orders_json = orders_resp.json()
-                        print("ORDERS parsed:", orders_json)
-                        if orders_resp.status_code == 200:
-                            orders_data = orders_json
 
-                    except Exception as parse_error:
-                        print("ORDERS parse error:", str(parse_error))
+                    if orders_resp.status_code == 200:
+                        try:
+                            orders_json = orders_resp.json()
+                            print("ORDERS parsed:", orders_json)
+
+                            if isinstance(orders_json, list):
+                                orders_data = orders_json
+                            else:
+                                print("ORDERS no es lista:", type(orders_json))
+
+                        except Exception as parse_error:
+                            print("ORDERS parse error:", str(parse_error))
+                    else:
+                        print("ORDERS no respondio 200:", orders_resp.text)
+
                 except Exception as fetch_error:
                     print("ORDERS fetch error:", str(fetch_error))
+
 
             plato_ids_usados = set()
             for pedido in orders_data:

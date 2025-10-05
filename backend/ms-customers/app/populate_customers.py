@@ -16,7 +16,7 @@ def populate_if_empty():
         count = cur.fetchone()[0]
 
         if count == 0:
-            for _ in range(20000):
+            for _ in range(100):
                 name = fake.name()
                 email = fake.unique.email()
                 phone = fake.phone_number()
@@ -33,3 +33,4 @@ def populate_if_empty():
         conn.close()
     except Exception as e:
         print(f"❌ Error al poblar la base: {e}")
+
